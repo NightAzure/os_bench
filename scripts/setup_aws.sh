@@ -51,7 +51,7 @@ sudo apt-get update -y -q
 # taskset, renice, lscpu -> util-linux
 # pidstat, mpstat -> sysstat
 # perf -> linux-tools*
-# wrk build deps -> git, build-essential, libssl-dev
+# wrk build deps -> git, build-essential, libssl-dev, unzip
 # venv/pip -> python3-venv, python3-pip, python3-dev
 BASE_PACKAGES=(
     bash
@@ -59,6 +59,7 @@ BASE_PACKAGES=(
     curl
     wget
     git
+    unzip
     procps
     coreutils
     util-linux
@@ -96,9 +97,11 @@ else
     rm -rf /tmp/wrk_build
     git clone --depth 1 https://github.com/wg/wrk.git /tmp/wrk_build
     cd /tmp/wrk_build
+    trap 'rm -rf /tmp/wrk_build' EXIT
     make -j"$(nproc)"
     sudo cp wrk /usr/local/bin/wrk
     cd - > /dev/null
+    trap - EXIT
     rm -rf /tmp/wrk_build
     echo "  wrk installed: $(wrk --version 2>&1 | head -1)"
 fi
@@ -106,6 +109,7 @@ fi
 echo ""
 echo "[2b/5] Verifying required commands..."
 require_command bash bash
+require_command unzip unzip
 require_command wrk "built from https://github.com/wg/wrk"
 require_command curl curl
 require_command ps procps

@@ -56,7 +56,7 @@ System tools required for benchmark execution:
 
 ```text
 bash, wrk, uvicorn, pidstat, mpstat, perf, taskset, renice, sudo, curl,
-ps, lscpu, shuf
+ps, lscpu, shuf, unzip
 ```
 
 The smoke test does not require `wrk`, an EC2 host, or model downloads.
