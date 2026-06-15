@@ -323,6 +323,36 @@ check_workers_alive() {
   run_on_client curl -sf "http://127.0.0.1:$PORT/health" >/dev/null || die "Health check failed before $label"
 }
 
+discover_worker_pids() {
+  local -a candidates=()
+  local -a workers=()
+  local pid args
+  mapfile -t candidates < <(pgrep -P "$SERVER_PID" || true)
+  for pid in "${candidates[@]}"; do
+    args="$(ps -o args= -p "$pid" 2>/dev/null || true)"
+    [[ -n "$args" ]] || continue
+    case "$args" in
+      *multiprocessing.resource_tracker*|*multiprocessing.semaphore_tracker*)
+        continue
+        ;;
+    esac
+    workers+=("$pid")
+  done
+  if (( ${#workers[@]} > 0 )); then
+    printf "%s\n" "${workers[@]}"
+  fi
+}
+
+describe_server_children() {
+  local -a candidates=()
+  mapfile -t candidates < <(pgrep -P "$SERVER_PID" || true)
+  if (( ${#candidates[@]} == 0 )); then
+    echo "no child processes"
+  else
+    ps -o pid=,ppid=,stat=,args= -p "$(IFS=,; echo "${candidates[*]}")" 2>/dev/null || true
+  fi
+}
+
 start_server() {
   local thread_setting="$1"
   apply_thread_env "$thread_setting"
@@ -336,10 +366,19 @@ start_server() {
     attempts=$((attempts+1))
     [[ $attempts -ge 60 ]] && die "Server did not start for $LIBRARY / thread=$thread_setting"
   done
-  mapfile -t WORKER_PIDS_ARR < <(pgrep -P "$SERVER_PID" || true)
+  attempts=0
+  while true; do
+    mapfile -t WORKER_PIDS_ARR < <(discover_worker_pids)
+    if (( ${#WORKER_PIDS_ARR[@]} == WORKERS )); then
+      break
+    fi
+    sleep 1
+    attempts=$((attempts+1))
+    [[ $attempts -ge 20 ]] && break
+  done
   [[ ${#WORKER_PIDS_ARR[@]} -gt 0 ]] || die "No worker PIDs found"
   if (( ${#WORKER_PIDS_ARR[@]} != WORKERS )); then
-    die "Expected $WORKERS worker PIDs, found ${#WORKER_PIDS_ARR[@]}: ${WORKER_PIDS_ARR[*]}"
+    die "Expected $WORKERS worker PIDs, found ${#WORKER_PIDS_ARR[@]}: ${WORKER_PIDS_ARR[*]}. Children: $(describe_server_children | tr '\n' '; ')"
   fi
   check_workers_alive "first trial"
 }
